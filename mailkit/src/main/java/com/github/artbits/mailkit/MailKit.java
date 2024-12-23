@@ -97,6 +97,11 @@ public final class MailKit {
         public List<Cc> ccList;
         public MainBody mainBody;
 
+        @Override
+        public String toString() {
+            return "Msg.uid:" + uid;
+        }
+
         protected Msg(Consumer<Msg> consumer) {
             consumer.accept(this);
         }

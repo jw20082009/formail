@@ -2,8 +2,13 @@ package com.github.artbits.androidmail.view;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.CompoundButton;
 
 import com.github.artbits.androidmail.App;
 import com.github.artbits.androidmail.R;
@@ -12,8 +17,10 @@ import com.github.artbits.androidmail.databinding.ActivityConfigBinding;
 import com.github.artbits.androidmail.store.UserInfo;
 import com.github.artbits.mailkit.MailKit;
 
-public class ConfigActivity extends BaseActivity {
+import java.util.regex.Pattern;
 
+public class ConfigActivity extends BaseActivity {
+    private final String TAG = "ConfigActivity";
     private ActivityConfigBinding binding;
     private UserInfo userInfo;
 
@@ -26,6 +33,38 @@ public class ConfigActivity extends BaseActivity {
         userInfo = App.db.collection(UserInfo.class).findFirst();
         boolean isLogin = (userInfo != null);
         setToolbar(binding.toolbar, "服务器配置", isLogin);
+        binding.accountText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                Log.e(TAG, "beforeTextChanged:" + s);
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                Log.e(TAG, "onTextChanged:" + s);
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                Log.e(TAG, "afterTextChanged:" + s);
+                String account = s.toString();
+                if (!Utils.isEmail(account) || (binding.accountText.getTag() instanceof String && TextUtils.equals((CharSequence) binding.accountText.getTag(), account))) {
+                    return;
+                }
+                binding.accountText.setTag(account);
+                UserInfo info = new UserInfo();
+                info.password = binding.passwordText.getText().toString();
+                info.nickname = account.substring(0, account.lastIndexOf("@"));
+                info.SMTPHost = "smtp." + account.substring(account.lastIndexOf("@") + 1);
+                info.SMTPPort = binding.smtpEncryptionSwt.isChecked()? 465: 993;
+                info.SMTPSSLEnable = binding.smtpEncryptionSwt.isChecked();
+                info.IMAPHost = "imap." + account.substring(account.lastIndexOf("@") + 1);
+                info.IMAPPort = 993;
+                info.IMAPSSLEnable = binding.imapEncryptionSwt.isChecked();
+                initData(info, false);
+            }
+        });
+        binding.smtpEncryptionSwt.setOnCheckedChangeListener((buttonView, isChecked) -> binding.smtpPortText.setText(isChecked? "465": "993"));
         if (isLogin) {
             initData(userInfo);
         }
@@ -50,9 +89,14 @@ public class ConfigActivity extends BaseActivity {
         return super.onOptionsItemSelected(item);
     }
 
-
     private void initData(UserInfo userInfo) {
-        binding.accountText.setText(userInfo.account);
+        initData(userInfo, true);
+    }
+
+    private void initData(UserInfo userInfo, boolean refreshAccount) {
+        if (refreshAccount) {
+            binding.accountText.setText(userInfo.account);
+        }
         binding.passwordText.setText(userInfo.password);
         binding.nicknameText.setText(userInfo.nickname);
         binding.smtpHostText.setText(userInfo.SMTPHost);

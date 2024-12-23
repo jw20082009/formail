@@ -110,7 +110,15 @@ final class Tools {
 
     static MailKit.Msg getMsgHead(long uid, IMAPMessage imapMessage) {
         try {
-            long sentDate = imapMessage.getSentDate().getTime();
+            long sentDate;
+            if (imapMessage.getSentDate() != null) {
+                sentDate = imapMessage.getSentDate().getTime();
+            } else if (imapMessage.getReceivedDate() != null) {
+                sentDate = imapMessage.getReceivedDate().getTime();
+            } else {
+                sentDate = 0;
+            }
+
             String subject = imapMessage.getSubject();
             MailKit.Msg.Flags flags = getFlags(imapMessage.getFlags());
             MailKit.Msg.From from = Tools.getFrom(imapMessage.getFrom());
@@ -276,6 +284,21 @@ final class Tools {
         }
         folder.open(Folder.READ_WRITE);
         return folder;
+    }
+
+    public static boolean inDescendArray(long[] array, long target) {
+        if (array == null || array.length == 0) {
+            return false;
+        }
+        for (int i = array.length - 1; i >= 0; i--) {
+            long data = array[i];
+            if (data == target) {
+                return true;
+            } else if (data < target) {
+                return false;
+            }
+        }
+        return false;
     }
 
 }

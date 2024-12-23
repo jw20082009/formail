@@ -14,6 +14,15 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize" />
 
+        <ProgressBar
+            android:id="@+id/deleteProgress"
+            android:layout_width="match_parent"
+            android:layout_height="10dp"
+            style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+            android:progress="40"
+            android:max="100"
+            />
+
         <com.scwang.smart.refresh.layout.SmartRefreshLayout
             android:id="@+id/refresh_layout"
             android:layout_width="match_parent"

@@ -1,12 +1,17 @@
 package com.github.artbits.mailkit;
 
+import android.util.Log;
+
 import com.sun.mail.imap.IMAPFolder;
 import com.sun.mail.imap.IMAPMessage;
 import com.sun.mail.imap.IMAPStore;
 
 import java.net.MalformedURLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -20,7 +25,7 @@ import javax.mail.search.RecipientStringTerm;
 import javax.mail.search.SubjectTerm;
 
 class MailFolder {
-
+    private final String TAG = "MailFolder";
     private final MailKit.Config config;
     private final String folderName;
 
@@ -30,39 +35,76 @@ class MailFolder {
         this.folderName = folderName;
     }
 
-
-    public void sync(long[] localUIDArray, BiConsumer<List<MailKit.Msg>, List<Long>> consumer1, Consumer<Exception> consumer2) {
+    public void sync(long[] localUIDArray, Consumer<List<MailKit.Msg>> consumer, Consumer<List<Long>> deleteConsumer, Consumer<Exception> consumer2) {
         MailKit.thread.execute(() -> {
             synchronized (MailFolder.this) {
+                Log.e("uidHandler", "startSync ");
                 try(IMAPStore store = Tools.getStore(config); IMAPFolder folder = Tools.getFolder(store, folderName, config)) {
-                    UIDHandler.Result result = UIDHandler.syncUIDArray(folder, localUIDArray);
-                    long[] newArray = result.newArray;
-                    long[] delArray = result.delArray;
-                    List<MailKit.Msg> newMsgList = new ArrayList<>();
-                    List<Long> delUIDList = new ArrayList<>();
-                    if (newArray.length > 0) {
-                        Message[] messages = folder.getMessagesByUID(newArray);
-                        FetchProfile fetchProfile = new FetchProfile();
-                        fetchProfile.add(FetchProfile.Item.ENVELOPE);
-                        fetchProfile.add(FetchProfile.Item.FLAGS);
-                        folder.fetch(messages, fetchProfile);
-                        for (Message message : messages) {
-                            IMAPMessage imapMessage = (IMAPMessage) message;
-                            long uid = folder.getUID(imapMessage);
-                            MailKit.Msg msg = Tools.getMsgHead(uid, imapMessage);
-                            if (msg != null) {
-                                newMsgList.add(msg);
+                    long start = System.currentTimeMillis();
+                    final Semaphore semaphore = new Semaphore(0);
+                    if (localUIDArray.length != 0) {
+                        Arrays.sort(localUIDArray);
+                    }
+                    //获取message数组
+                    Message[] msgList = folder.getMessages();
+                    MailKit.thread.execute(() -> {
+                        try {
+                            long[] newArray = UIDHandler.syncNewUIDArray(folder, localUIDArray, msgList);
+                            if (newArray != null && newArray.length > 0) {
+                                Message[] messages = folder.getMessagesByUID(newArray);
+                                FetchProfile fetchProfile = new FetchProfile();
+                                fetchProfile.add(FetchProfile.Item.ENVELOPE);
+                                fetchProfile.add(FetchProfile.Item.FLAGS);
+                                folder.fetch(messages, fetchProfile);
+                                List<MailKit.Msg> newMsgList = new ArrayList<>();
+                                for (Message message : messages) {
+                                    IMAPMessage imapMessage = (IMAPMessage) message;
+                                    long uid = folder.getUID(imapMessage);
+                                    MailKit.Msg msg = Tools.getMsgHead(uid, imapMessage);
+                                    if (msg != null) {
+                                        Log.e("uidHandler", "onResult, onNewMsg:" + msg);
+                                        newMsgList.add(msg);
+                                    }
+                                }
+                                Log.e(TAG, "syncNewUIDArray Success");
+                                MailKit.handler.post(() -> consumer.accept(newMsgList));
                             }
+                        } catch (MessagingException e) {
+                            throw new RuntimeException(e);
+                        } finally {
+                            semaphore.release();
                         }
+                    });
+
+                    MailKit.thread.execute(() -> {
+                        try {
+                            long[] delArray = UIDHandler.syncDeletedUIDArray(folder, localUIDArray, msgList);
+                            final List<Long> delUIDList = new ArrayList<>();
+                            if (delArray != null) {
+                                for (long uid : delArray) {
+                                    delUIDList.add(uid);
+                                }
+                            }
+                            Log.e(TAG, "syncDeletedUIDArray Success");
+                            MailKit.handler.post(() ->deleteConsumer.accept(delUIDList));
+                        } catch (MessagingException e) {
+                            throw new RuntimeException(e);
+                        } finally {
+                            semaphore.release();
+                        }
+                    });
+                    if (!semaphore.tryAcquire(2, 120, TimeUnit.SECONDS)) {
+                        Log.e(TAG, "sync timeOut");
+                    } else {
+                        Log.e(TAG, "sync Success");
                     }
-                    for (long uid : delArray) {
-                        delUIDList.add(uid);
-                    }
-                    MailKit.handler.post(() -> consumer1.accept(newMsgList, delUIDList));
-                } catch (MessagingException e) {
+                } catch (Exception e) {
                     MailKit.handler.post(() -> consumer2.accept(e));
                 }
             }
+        });
+        MailKit.thread.execute(() -> {
+
         });
     }
 

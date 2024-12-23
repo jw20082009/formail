@@ -22,6 +22,7 @@ import com.scwang.smart.refresh.layout.api.RefreshLayout;
 import com.scwang.smart.refresh.layout.listener.OnRefreshLoadMoreListener;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -117,9 +118,13 @@ public class FolderActivity extends BaseActivity {
             });
         } else {
             long[] localUIDArray = getLocalUIDArray(folderName);
-            folder.sync(localUIDArray, (newMsgList, delUIDArray) -> {
+            folder.sync(localUIDArray, (newMsgList) -> {
                 saveMessages(folderName, newMsgList);
-                delMessages(folderName, delUIDArray);
+                List<Message> messages = getMessage(folderName);
+                adapter.setNewData(messages);
+                refreshLayout.finishRefresh();
+            }, (deleteMsgList) -> {
+                delMessages(folderName, deleteMsgList);
                 List<Message> messages = getMessage(folderName);
                 adapter.setNewData(messages);
                 refreshLayout.finishRefresh();

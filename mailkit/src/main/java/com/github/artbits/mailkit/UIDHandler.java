@@ -29,47 +29,46 @@ class UIDHandler {
 
 
     //对本地已存在的uid进行同步的算法
-    static Result syncUIDArray(IMAPFolder folder, long[] localUIDArray) throws MessagingException {
-        //获取message数组
-        Message[] msgList = folder.getMessages();
-
-        //获取本地消息和服务器消息的数组长度
+    static long[] syncNewUIDArray(IMAPFolder folder, long[] localUIDArray, Message[] msgList) throws MessagingException {
         int localLength = localUIDArray.length;
         int netLength = msgList.length;
-
-        //初始化数组
-        long[] newArray = new long[0];
-        long[] delArray = new long[0];
-
-        //如果本地一封邮件都没有，则框架什么也做，不会拉取新数据
-        if (localLength == 0) {
-            return new Result(newArray, delArray);
-        }
-
         //服务器没有一封邮件（服务器上的邮件已经被全部删除），则把本地已存储的邮件已删除
         if (netLength == 0) {
-            return new Result(newArray, localUIDArray);
+            return null;
         }
-
-        //排序本地的uid，由小到大
-        Arrays.sort(localUIDArray);
-
         //服务端的消息已全部同步到本地
         if (localLength != netLength || localUIDArray[localLength - 1] != folder.getUID(msgList[netLength - 1])) {
             //判断邮件服务器是否有新邮件
+            long[] newArray = new long[0];
             long uid;
             long localMaxUID = localUIDArray[localLength - 1];
             for (int i = netLength - 1; (uid = folder.getUID(msgList[i])) > localMaxUID; --i) {
                 newArray = Basis.insertUID(newArray, uid);
             }
-            //判断邮件服务器是否有已删除的邮件
-            for (long localUID : localUIDArray) {
-                if (Basis.binarySearch(folder, msgList, localUID) < 0) {
-                    delArray = Basis.insertUID(delArray, localUID);
-                }
+            return newArray;
+        }
+        return null;
+    }
+
+    static long[] syncDeletedUIDArray(IMAPFolder folder, long[] localUIDArray, Message[] msgList) throws MessagingException {
+        //获取本地消息和服务器消息的数组长度
+        int localLength = localUIDArray.length;
+        int netLength = msgList.length;
+        //如果本地一封邮件都没有，则框架什么也做，不会拉取新数据
+        if (localLength == 0) {
+            return null;
+        }
+        //服务器没有一封邮件（服务器上的邮件已经被全部删除），则把本地已存储的邮件已删除
+        if (netLength == 0) {
+            return localUIDArray;
+        }
+        long[] delArray = new long[0];
+        for (long localUID : localUIDArray) {
+            if (Basis.binarySearch(folder, msgList, localUID) < 0) {
+                delArray = Basis.insertUID(delArray, localUID);
             }
         }
-        return new Result(newArray, delArray);
+        return delArray;
     }
 
 
